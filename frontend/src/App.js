@@ -1,55 +1,113 @@
-import React, { useState, useEffect } from 'react';
-import { Star, Filter, Users, TrendingUp, CheckCircle, Clock, BarChart3, AlertTriangle, Calendar, Search, Download, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Star, Filter, Users, TrendingUp, CheckCircle, Clock, BarChart3, AlertTriangle, Search, Download, ExternalLink } from 'lucide-react';
 
+/**
+ * Flex Living Reviews Dashboard - Main application component
+ * 
+ * A comprehensive property management dashboard for monitoring and managing
+ * guest reviews across multiple properties and channels (Hostaway, Google Reviews).
+ * 
+ * Features:
+ * - Manager Dashboard: Review approval workflow and filtering
+ * - Analytics: Performance insights and trend analysis  
+ * - Property Display: Public-facing review showcase
+ * 
+ * @author Sean-Robert Ntonya
+ * @version 1.0
+ */
 const FlexLivingDashboard = () => {
+  // =========================================================================
+  // STATE MANAGEMENT
+  // =========================================================================
+
+  // Core review data - stores all reviews from API
   const [reviews, setReviews] = useState([]);
+  // Filtered subset of reviews based on current search/filter criteria
   const [filteredReviews, setFilteredReviews] = useState([]);
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+
+  // UI state for tab navigation and loading indicators
+  const [activeTab, setActiveTab] = useState('dashboard'); // Current active tab
+  const [loading, setLoading] = useState(true); // Loading state for API calls
+  // User friendly errors
+  const [error, setError] = useState(null);
+  // Search and filtering state
+  const [searchTerm, setSearchTerm] = useState(''); // Text search across reviews
+  const [dateRange, setDateRange] = useState({ start: '', end: '' }); // Date range filter
   const [filters, setFilters] = useState({
-    property: '',
-    rating: '',
-    status: '',
-    date: '',
-    sortBy: 'date-desc',
-    channel: ''
+    property: '',           // Selected property filter
+    rating: '',            // Minimum rating filter (6+, 7+, 8+, 9+)
+    status: '',            // Approval status filter (approved/pending)
+    date: '',              // Single date filter (legacy)
+    sortBy: 'date-desc',   // Sort order (date-desc, date-asc, rating-desc, rating-asc)
+    channel: ''            // Review channel filter (hostaway, google, etc.)
   });
 
+  /**
+   * API Base URL configuration
+   * Switches between production Railway backend and local development
+   * Production: Points to Railway-deployed Express server
+   * Development: Uses relative URLs (proxy or same origin)
+   */
   const API_BASE_URL = process.env.NODE_ENV === 'production'
     ? 'https://flexlivingreviews-production.up.railway.app'
     : '';
 
-  // API integration - fetches from your backend
-  const fetchReviews = async () => {
+  /**
+   * Fetches reviews from the backend API
+   * 
+   * The backend connects to Hostaway API and falls back to mock data
+   * if the API is unavailable (expected in sandbox environment).
+   * Updates both reviews and filteredReviews state with normalized data.
+   * 
+   * @async
+   * @function fetchReviews
+   */
+  const fetchReviews = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null); // Clears previous errors
+      // Call backend API endpoint that handles Hostaway integration
       const response = await fetch(`${API_BASE_URL}/api/reviews/hostaway`);
       const data = await response.json();
 
       if (data.success) {
+        // Update state with normalized review data
         setReviews(data.data);
         setFilteredReviews(data.data);
       } else {
         console.error('Failed to fetch reviews:', data.error);
+        // TODO: Add user-facing error message
       }
     } catch (error) {
+      setError("Failed to load reviews. Please try again later");
       console.error('Network error:', error);
+      // TODO: Add retry mechanism and user notification
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_BASE_URL]);
 
+  /**
+   * Initial data loading effect
+   * Runs once when component mounts to fetch reviews from API
+   */
   useEffect(() => {
     fetchReviews();
-  }, []);
+  }, [fetchReviews]);
 
+  /**
+   * Filtering and sorting effect
+   * 
+   * Runs whenever reviews, filters, search term, or date range changes.
+   * Applies all active filters and sorting to the reviews dataset.
+   * This is the core filtering logic that powers the dashboard's search functionality.
+   */
   useEffect(() => {
     let filtered = reviews.filter(review => {
       let include = true;
 
-      // Search filter
+      // TEXT SEARCH FILTER
+      // Searches across guest name, review content, and property name
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase();
         include = include && (
@@ -59,21 +117,41 @@ const FlexLivingDashboard = () => {
         );
       }
 
-      // Existing filters
-      if (filters.property && review.listingName !== filters.property) include = false;
-      if (filters.rating && (review.rating || 0) < parseInt(filters.rating)) include = false;
+      // PROPERTY FILTER
+      // Exact match filter for specific property selection
+      if (filters.property && review.listingName !== filters.property) {
+        include = false;
+      }
+
+      // RATING FILTER  
+      // Minimum rating threshold filter (6+, 7+, 8+, 9+ stars)
+      if (filters.rating && (review.rating || 0) < parseInt(filters.rating)) {
+        include = false;
+      }
+
+      // STATUS FILTER
+      // Filter by approval status (approved/pending)
       if (filters.status === 'approved' && !review.approved) include = false;
       if (filters.status === 'pending' && review.approved) include = false;
+
+      // CHANNEL FILTER
+      // Filter by review source platform (hostaway, google, etc.)
       if (filters.channel && review.channel !== filters.channel) include = false;
-      
-      // Date range filter
-      if (dateRange.start && new Date(review.submittedAt) < new Date(dateRange.start)) include = false;
-      if (dateRange.end && new Date(review.submittedAt) > new Date(dateRange.end)) include = false;
+
+      // DATE RANGE FILTER
+      // Filter reviews within specified date range
+      if (dateRange.start && new Date(review.submittedAt) < new Date(dateRange.start)) {
+        include = false;
+      }
+      if (dateRange.end && new Date(review.submittedAt) > new Date(dateRange.end)) {
+        include = false;
+      }
 
       return include;
     });
 
-    // Sorting
+    // SORTING LOGIC
+    // Apply selected sorting criteria to filtered results
     filtered.sort((a, b) => {
       switch (filters.sortBy) {
         case 'date-asc':
@@ -85,15 +163,27 @@ const FlexLivingDashboard = () => {
         case 'rating-desc':
           return (b.rating || 0) - (a.rating || 0);
         default:
+          // Default to newest first
           return new Date(b.submittedAt) - new Date(a.submittedAt);
       }
     });
 
+    // Update filtered results state
     setFilteredReviews(filtered);
   }, [reviews, filters, searchTerm, dateRange]);
 
+  /**
+   * Toggles the approval status of a review
+   * 
+   * Updates both local state (for immediate UI feedback) and backend via API.
+   * This is the core function for the review approval workflow.
+   * 
+   * @param {number} reviewId - The ID of the review to update
+   * @param {boolean} approved - New approval status (true = approved, false = hidden)
+   */
   const toggleApproval = async (reviewId, approved) => {
     try {
+      // Call backend API to persist the approval change
       const response = await fetch(`${API_BASE_URL}/api/reviews/${reviewId}/approval`, {
         method: 'PATCH',
         headers: {
@@ -103,30 +193,54 @@ const FlexLivingDashboard = () => {
       });
 
       if (response.ok) {
+        // Update local state immediately for responsive UI
+        // This optimistic update provides instant feedback to users
         setReviews(prev =>
           prev.map(review =>
             review.id === reviewId ? { ...review, approved } : review
           )
         );
+      } else {
+        // TODO: Add error handling and user notification
+        console.error('Failed to update approval status');
       }
     } catch (error) {
       console.error('Failed to update approval status:', error);
+      // TODO: Revert optimistic update on error
     }
   };
 
+  /**
+   * Generates star rating display component
+   * 
+   * Converts numeric rating (0-10 scale) to visual star representation.
+   * Handles full stars, half stars, and empty stars for precise ratings.
+   * 
+   * @param {number} rating - Rating value (0-10 scale)
+   * @returns {JSX.Element} Star rating component with filled/half/empty stars
+   */
   const generateStars = (rating) => {
-    //This ensures the rating is a valid number between 0 and 10
-    const safeRating = Math.max(0, Math.min(10, rating || 0))
-    const fullStars = Math.floor(safeRating / 2);
-    const halfStar = (safeRating % 2) >= 1;
-    const emptyStars = Math.max(0, 5 - fullStars - (halfStar ? 1 : 0));
+    // Ensure rating is within valid bounds (0-10)
+    const safeRating = Math.max(0, Math.min(10, rating || 0));
+
+    // Convert 10-point scale to 5-star display
+    const fullStars = Math.floor(safeRating / 2);         // Number of full stars
+    const halfStar = (safeRating % 2) >= 1;               // Whether to show half star
+    const emptyStars = Math.max(0, 5 - fullStars - (halfStar ? 1 : 0)); // Remaining empty stars
 
     return (
       <div className="flex items-center gap-1">
+        {/* Render full stars */}
         {[...Array(fullStars)].map((_, i) => (
           <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />
         ))}
-        {halfStar && <Star className="w-4 h-4 fill-yellow-400/50 text-yellow-400" />}
+
+        {/* Render half star if needed */}
+        {halfStar && (
+          <Star className="w-4 h-4 fill-yellow-400/50 text-yellow-400" />
+        )}
+
+        {/* Render empty stars */}
         {[...Array(emptyStars)].map((_, i) => (
           <Star key={`empty-${i}`} className="w-4 h-4 text-gray-300" />
         ))}
@@ -134,6 +248,12 @@ const FlexLivingDashboard = () => {
     );
   };
 
+  /**
+   * Formats date string for user-friendly display
+   * 
+   * @param {string} dateString - ISO date string from API
+   * @returns {string} Formatted date string (e.g., "Nov 28, 2024")
+   */
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -142,12 +262,25 @@ const FlexLivingDashboard = () => {
     });
   };
 
+  /**
+   * Formats review category names for display
+   * Converts snake_case API field names to human-readable titles
+   * 
+   * @param {string} category - Category name from API (e.g., "respect_house_rules")
+   * @returns {string} Formatted category name (e.g., "Respect House Rules")
+   */
   const formatCategoryName = (category) => {
     return category.split('_').map(word =>
       word.charAt(0).toUpperCase() + word.slice(1)
     ).join(' ');
   };
 
+  /**
+   * Calculates key statistics for the current filtered dataset
+   * Used in the dashboard overview cards and analytics
+   * 
+   * @returns {Object} Statistics object with total, avgRating, approved, pending counts
+   */
   const getStats = () => {
     const total = filteredReviews.length;
     const avgRating = total > 0
@@ -159,23 +292,37 @@ const FlexLivingDashboard = () => {
     return { total, avgRating, approved, pending };
   };
 
+  /**
+   * Generates analytics data for performance insights
+   * Calculates metrics by property, channel, and identifies issues
+   * 
+   * @returns {Object} Analytics data including property performance and action items
+   */
   const getAnalytics = () => {
-    const byProperty = {};
-    const byChannel = {};
-    const lowRatedReviews = reviews.filter(r => r.rating < 8).length;
+    const byProperty = {};     // Performance metrics by property
+    const byChannel = {};      // Performance metrics by review channel
+    const lowRatedReviews = reviews.filter(r => r.rating < 8).length; // Reviews needing attention
 
+    // Aggregate data by property and channel
     reviews.forEach(review => {
-      // By property
+      // BY PROPERTY AGGREGATION
       if (!byProperty[review.listingName]) {
-        byProperty[review.listingName] = { count: 0, totalRating: 0, approved: 0 };
+        byProperty[review.listingName] = {
+          count: 0,
+          totalRating: 0,
+          approved: 0
+        };
       }
       byProperty[review.listingName].count++;
       byProperty[review.listingName].totalRating += review.rating;
       if (review.approved) byProperty[review.listingName].approved++;
 
-      // By channel
+      // BY CHANNEL AGGREGATION
       if (!byChannel[review.channel]) {
-        byChannel[review.channel] = { count: 0, totalRating: 0 };
+        byChannel[review.channel] = {
+          count: 0,
+          totalRating: 0
+        };
       }
       byChannel[review.channel].count++;
       byChannel[review.channel].totalRating += review.rating;
@@ -184,13 +331,19 @@ const FlexLivingDashboard = () => {
     return { byProperty, byChannel, lowRatedReviews };
   };
 
+  /**
+   * Exports filtered reviews to CSV format
+   * Generates downloadable CSV file with current filter/search results
+   */
   const exportReviews = () => {
-    const csvContent = "data:text/csv;charset=utf-8," + 
+    // Create CSV content with headers and data rows
+    const csvContent = "data:text/csv;charset=utf-8," +
       "Property,Guest,Rating,Review,Date,Channel,Status\n" +
-      filteredReviews.map(r => 
+      filteredReviews.map(r =>
         `"${r.listingName}","${r.guestName}",${r.rating},"${r.publicReview.replace(/"/g, '""')}","${r.submittedAt}","${r.channel}","${r.approved ? 'Approved' : 'Pending'}"`
       ).join("\n");
 
+    // Trigger download
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -200,12 +353,16 @@ const FlexLivingDashboard = () => {
     document.body.removeChild(link);
   };
 
-  const stats = getStats();
-  const analytics = getAnalytics();
-  const properties = [...new Set(reviews.map(review => review.listingName))];
-  const channels = [...new Set(reviews.map(review => review.channel))];
-  const approvedReviews = reviews.filter(review => review.approved);
+  const stats = getStats();                                              // Current statistics
+  const analytics = getAnalytics();                                      // Analytics data
+  const properties = [...new Set(reviews.map(review => review.listingName))]; // Unique properties
+  const channels = [...new Set(reviews.map(review => review.channel))];  // Unique channels
+  const approvedReviews = reviews.filter(review => review.approved);     // Approved reviews only
 
+  /**
+   * Loading state display
+   * Shows spinner and loading message while fetching data from API
+   */
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -220,7 +377,8 @@ const FlexLivingDashboard = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Header */}
+
+        {/* ===== HEADER SECTION ===== */}
         <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-8 text-white mb-8">
           <div className="flex justify-between items-center">
             <div>
@@ -234,7 +392,7 @@ const FlexLivingDashboard = () => {
           </div>
         </div>
 
-        {/* Navigation Tabs */}
+        {/* ===== NAVIGATION TABS ===== */}
         <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg mb-8 w-fit">
           <button
             onClick={() => setActiveTab('dashboard')}
@@ -264,12 +422,28 @@ const FlexLivingDashboard = () => {
             Property Display
           </button>
         </div>
-
-        {/* Dashboard Tab */}
+        {/* ===== ERROR DISPLAY ===== */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-8">
+            <div className="flex items-center gap-2 text-red-800">
+              <AlertTriangle className="w-5 h-5" />
+              <p className="font-medium">{error}</p>
+              <button
+                onClick={() => setError(null)}
+                className="ml-auto text-red-600 hover:text-red-800"
+              >
+                x
+              </button>
+            </div>
+          </div>
+        )}
+        {/* ===== DASHBOARD TAB ===== */}
+        {/* Main manager interface for review approval and management */}
         {activeTab === 'dashboard' && (
           <div>
-            {/* Stats Overview */}
+            {/* Overview Statistics Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+              {/* Total Reviews Card */}
               <div className="bg-gradient-to-r from-pink-500 to-red-500 p-6 rounded-xl text-white">
                 <div className="flex items-center justify-between">
                   <div>
@@ -280,6 +454,7 @@ const FlexLivingDashboard = () => {
                 </div>
               </div>
 
+              {/* Average Rating Card */}
               <div className="bg-gradient-to-r from-blue-500 to-cyan-500 p-6 rounded-xl text-white">
                 <div className="flex items-center justify-between">
                   <div>
@@ -290,6 +465,7 @@ const FlexLivingDashboard = () => {
                 </div>
               </div>
 
+              {/* Approved Reviews Card */}
               <div className="bg-gradient-to-r from-green-500 to-emerald-500 p-6 rounded-xl text-white">
                 <div className="flex items-center justify-between">
                   <div>
@@ -300,6 +476,7 @@ const FlexLivingDashboard = () => {
                 </div>
               </div>
 
+              {/* Pending Reviews Card */}
               <div className="bg-gradient-to-r from-yellow-500 to-orange-500 p-6 rounded-xl text-white">
                 <div className="flex items-center justify-between">
                   <div>
@@ -311,10 +488,11 @@ const FlexLivingDashboard = () => {
               </div>
             </div>
 
-            {/* Search and Export */}
+            {/* Search and Export Controls */}
             <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
               <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
                 <div className="flex gap-4 flex-1">
+                  {/* Text Search Input */}
                   <div className="relative flex-1 max-w-md">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                     <input
@@ -325,6 +503,8 @@ const FlexLivingDashboard = () => {
                       className="pl-10 pr-4 py-3 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     />
                   </div>
+
+                  {/* Date Range Filters */}
                   <div className="flex gap-2">
                     <input
                       type="date"
@@ -340,6 +520,8 @@ const FlexLivingDashboard = () => {
                     />
                   </div>
                 </div>
+
+                {/* Export Button */}
                 <button
                   onClick={exportReviews}
                   className="flex items-center gap-2 px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
@@ -350,15 +532,18 @@ const FlexLivingDashboard = () => {
               </div>
             </div>
 
-            {/* Filters and Reviews */}
+            {/* Main Content Area: Filters + Reviews */}
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-              {/* Sidebar Filters */}
+
+              {/* ===== SIDEBAR FILTERS ===== */}
               <div className="bg-white rounded-xl p-6 shadow-sm h-fit">
                 <div className="flex items-center gap-2 mb-6">
                   <Filter className="w-5 h-5 text-indigo-600" />
                   <h3 className="font-semibold text-gray-900">Filters</h3>
                 </div>
+
                 <div className="space-y-4">
+                  {/* Property Filter */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Property</label>
                     <select
@@ -373,6 +558,7 @@ const FlexLivingDashboard = () => {
                     </select>
                   </div>
 
+                  {/* Channel Filter */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Channel</label>
                     <select
@@ -387,6 +573,7 @@ const FlexLivingDashboard = () => {
                     </select>
                   </div>
 
+                  {/* Status Filter */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
                     <select
@@ -400,6 +587,7 @@ const FlexLivingDashboard = () => {
                     </select>
                   </div>
 
+                  {/* Minimum Rating Filter */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Min Rating</label>
                     <select
@@ -415,6 +603,7 @@ const FlexLivingDashboard = () => {
                     </select>
                   </div>
 
+                  {/* Sort Order */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
                     <select
@@ -431,32 +620,39 @@ const FlexLivingDashboard = () => {
                 </div>
               </div>
 
-              {/* Reviews List */}
+              {/* ===== REVIEWS LIST ===== */}
               <div className="lg:col-span-3">
                 <div className="bg-white rounded-xl p-6 shadow-sm">
                   {filteredReviews.length === 0 ? (
+                    // Empty state when no reviews match filters
                     <div className="text-center py-12 text-gray-500">
                       No reviews found matching your filters
                     </div>
                   ) : (
+                    // Reviews list with individual review cards
                     <div className="space-y-6">
                       {filteredReviews.map(review => (
                         <div
                           key={review.id}
                           className={`border-2 rounded-xl p-6 transition-all hover:shadow-md ${review.approved
-                            ? 'border-green-200 bg-green-50'
-                            : review.rating < 8
-                            ? 'border-orange-200 bg-orange-50'
-                            : 'border-gray-200 bg-gray-50 hover:border-indigo-300'
+                              ? 'border-green-200 bg-green-50'           // Approved: green styling
+                              : review.rating < 8
+                                ? 'border-orange-200 bg-orange-50'        // Low rating: orange warning
+                                : 'border-gray-200 bg-gray-50 hover:border-indigo-300' // Default: gray
                             }`}
                         >
+                          {/* Review Header: Guest info, channel, rating */}
                           <div className="flex justify-between items-start mb-4">
                             <div className="flex-1">
                               <div className="flex items-center gap-3 mb-2">
                                 <h4 className="font-semibold text-gray-900">{review.guestName}</h4>
+
+                                {/* Channel Badge */}
                                 <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
                                   {review.channel}
                                 </span>
+
+                                {/* Low Rating Warning */}
                                 {review.rating < 8 && (
                                   <span className="px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full flex items-center gap-1">
                                     <AlertTriangle className="w-3 h-3" />
@@ -467,35 +663,40 @@ const FlexLivingDashboard = () => {
                               <p className="text-sm text-gray-600">{review.listingName}</p>
                               <p className="text-xs text-gray-500">{formatDate(review.submittedAt)}</p>
                             </div>
+
+                            {/* Rating Display */}
                             <div className="flex items-center gap-2">
                               {generateStars(review.rating || 0)}
                               <span className="font-medium">{(review.rating || 0).toFixed(1)}</span>
                             </div>
                           </div>
 
+                          {/* Review Categories (if available) */}
                           {review.reviewCategory?.length > 0 && (
                             <div className="flex flex-wrap gap-2 mb-4">
                               {review.reviewCategory.map(cat => (
                                 <span
                                   key={cat.category}
-                                  className={`px-3 py-1 text-xs rounded-full ${
-                                    cat.rating >= 9 
-                                      ? 'bg-green-100 text-green-800'
+                                  className={`px-3 py-1 text-xs rounded-full ${cat.rating >= 9
+                                      ? 'bg-green-100 text-green-800'      // Excellent: green
                                       : cat.rating >= 7
-                                      ? 'bg-blue-100 text-blue-800'
-                                      : 'bg-orange-100 text-orange-800'
-                                  }`}
+                                        ? 'bg-blue-100 text-blue-800'       // Good: blue
+                                        : 'bg-orange-100 text-orange-800'   // Needs attention: orange
+                                    }`}
                                 >
                                   {formatCategoryName(cat.category)}: {cat.rating}/10
                                 </span>
                               ))}
                             </div>
                           )}
-                          
+
+                          {/* Review Text */}
                           <p className="text-gray-700 mb-4 leading-relaxed">{review.publicReview}</p>
 
+                          {/* Approval Action Buttons */}
                           <div className="flex justify-end gap-2">
                             {review.approved ? (
+                              // Already approved - show status with option to hide
                               <button
                                 onClick={() => toggleApproval(review.id, false)}
                                 className="px-4 py-2 bg-green-100 text-green-800 rounded-lg font-medium flex items-center gap-2 hover:bg-green-200 transition-colors"
@@ -504,6 +705,7 @@ const FlexLivingDashboard = () => {
                                 Approved
                               </button>
                             ) : (
+                              // Pending approval - show approve/hide options
                               <>
                                 <button
                                   onClick={() => toggleApproval(review.id, true)}
@@ -530,10 +732,11 @@ const FlexLivingDashboard = () => {
           </div>
         )}
 
-        {/* Analytics Tab */}
+        {/* ===== ANALYTICS TAB ===== */}
+        {/* Performance insights and trend analysis */}
         {activeTab === 'analytics' && (
           <div>
-            {/* Performance by Property */}
+            {/* Performance by Property Section */}
             <div className="bg-white rounded-xl p-6 shadow-sm mb-8">
               <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-indigo-600" />
@@ -569,8 +772,10 @@ const FlexLivingDashboard = () => {
               </div>
             </div>
 
-            {/* Channel Performance */}
+            {/* Channel Performance and Action Items Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+              {/* Channel Performance */}
               <div className="bg-white rounded-xl p-6 shadow-sm">
                 <h3 className="text-xl font-semibold mb-6">Channel Performance</h3>
                 <div className="space-y-4">
@@ -648,9 +853,11 @@ const FlexLivingDashboard = () => {
           </div>
         )}
 
-        {/* Property Display Tab */}
+        {/* ===== PROPERTY DISPLAY TAB ===== */}
+        {/* Public-facing property page with approved reviews */}
         {activeTab === 'property' && (
           <div className="max-w-4xl mx-auto">
+
             {/* Property Hero Section */}
             <div className="bg-gradient-to-r from-teal-500 to-cyan-500 rounded-xl p-12 text-white text-center mb-8 relative overflow-hidden">
               <div className="absolute inset-0 bg-black opacity-20"></div>
@@ -710,14 +917,14 @@ const FlexLivingDashboard = () => {
               {approvedReviews.length > 0 && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 p-6 bg-gray-50 rounded-lg">
                   {['cleanliness', 'location', 'amenities', 'hospitality'].map(category => {
-                    const categoryReviews = approvedReviews.filter(r => 
+                    const categoryReviews = approvedReviews.filter(r =>
                       r.reviewCategory?.some(c => c.category === category)
                     );
                     const avgScore = categoryReviews.length > 0
                       ? (categoryReviews.reduce((sum, r) => {
-                          const catData = r.reviewCategory.find(c => c.category === category);
-                          return sum + (catData?.rating || 0);
-                        }, 0) / categoryReviews.length).toFixed(1)
+                        const catData = r.reviewCategory.find(c => c.category === category);
+                        return sum + (catData?.rating || 0);
+                      }, 0) / categoryReviews.length).toFixed(1)
                       : '0.0';
 
                     return (
@@ -730,56 +937,61 @@ const FlexLivingDashboard = () => {
                 </div>
               )}
 
+              {/* Reviews Display */}
               {approvedReviews.length === 0 ? (
+                // Empty state for no approved reviews
                 <div className="text-center py-12 text-gray-500">
                   <Star className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No reviews yet</h3>
                   <p>Be the first to share your experience!</p>
                 </div>
               ) : (
+                // Display approved reviews only
                 <div className="space-y-6">
                   {approvedReviews
                     .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt))
                     .map(review => (
-                    <div key={review.id} className="border-l-4 border-indigo-500 bg-gray-50 p-6 rounded-r-xl hover:bg-gray-100 transition-colors">
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <h4 className="font-semibold text-gray-900 text-lg">{review.guestName}</h4>
-                          <div className="flex items-center gap-3 mt-1">
-                            <div className="flex items-center gap-1">
-                              {generateStars(review.rating || 0)}
+                      <div key={review.id} className="border-l-4 border-indigo-500 bg-gray-50 p-6 rounded-r-xl hover:bg-gray-100 transition-colors">
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <h4 className="font-semibold text-gray-900 text-lg">{review.guestName}</h4>
+                            <div className="flex items-center gap-3 mt-1">
+                              <div className="flex items-center gap-1">
+                                {generateStars(review.rating || 0)}
+                              </div>
+                              <span className="text-sm text-gray-500">{formatDate(review.submittedAt)}</span>
+                              <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                                {review.channel}
+                              </span>
                             </div>
-                            <span className="text-sm text-gray-500">{formatDate(review.submittedAt)}</span>
-                            <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                              {review.channel}
-                            </span>
                           </div>
+                          <span className="text-xl font-bold text-indigo-600">
+                            {(review.rating || 0).toFixed(1)}
+                          </span>
                         </div>
-                        <span className="text-xl font-bold text-indigo-600">
-                          {(review.rating || 0).toFixed(1)}
-                        </span>
+
+                        {/* Review categories for this review */}
+                        {review.reviewCategory?.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mb-4">
+                            {review.reviewCategory.map(cat => (
+                              <span
+                                key={cat.category}
+                                className="px-3 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full"
+                              >
+                                {formatCategoryName(cat.category)}: {cat.rating}/10
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Review text in quotation marks for public display */}
+                        <p className="text-gray-700 leading-relaxed text-lg">"{review.publicReview}"</p>
                       </div>
-                      
-                      {review.reviewCategory?.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mb-4">
-                          {review.reviewCategory.map(cat => (
-                            <span
-                              key={cat.category}
-                              className="px-3 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full"
-                            >
-                              {formatCategoryName(cat.category)}: {cat.rating}/10
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      
-                      <p className="text-gray-700 leading-relaxed text-lg">"{review.publicReview}"</p>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               )}
 
-              {/* Call to Action */}
+              {/* Call to Action for Bookings */}
               <div className="mt-8 p-6 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200">
                 <div className="text-center">
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">Ready to experience Flex Living?</h3>

@@ -36,3 +36,22 @@ A comprehensive full-stack reviews management dashboard for Flex Living properti
 - Data normalisation across review channels
 - Error handling with mock data fallback
 - RESTful API design with proper status codes
+
+## Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/flex-living-reviews
+cd flex-living-reviews
+
+# Install dependencies
+npm install
+
+# Set up environment variables
+cp .env.example .env
+# Edit .env with provided Hostaway credentials
+
+# Start the application
+npm start
+
+# Open http://localhost:3000
