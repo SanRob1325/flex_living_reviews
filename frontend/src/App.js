@@ -17,11 +17,15 @@ const FlexLivingDashboard = () => {
     channel: ''
   });
 
+  const API_BASE_URL = process.env.NODE_ENV === 'production'
+    ? 'https://flexlivingreviews-production.up.railway.app'
+    : '';
+
   // API integration - fetches from your backend
   const fetchReviews = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/reviews/hostaway');
+      const response = await fetch(`${API_BASE_URL}/api/reviews/hostaway`);
       const data = await response.json();
 
       if (data.success) {
@@ -90,7 +94,7 @@ const FlexLivingDashboard = () => {
 
   const toggleApproval = async (reviewId, approved) => {
     try {
-      const response = await fetch(`/api/reviews/${reviewId}/approval`, {
+      const response = await fetch(`${API_BASE_URL}/api/reviews/${reviewId}/approval`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
