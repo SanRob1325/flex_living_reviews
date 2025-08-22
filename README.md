@@ -41,7 +41,7 @@ A comprehensive full-stack reviews management dashboard for Flex Living properti
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/flex-living-reviews
+git clone https://github.com/SanRob1325/flex_living_reviews
 cd flex-living-reviews
 
 # Install dependencies
